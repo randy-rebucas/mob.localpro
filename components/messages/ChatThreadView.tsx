@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { BRAND } from '@/constants/brand';
 import { messageService } from '@/core/services/messageService';
 import { useToastStore } from '@/core/stores/toastStore';
@@ -107,7 +108,14 @@ export function ChatThreadView({ threadId, emptyHint }: Props) {
         keyExtractor={(m) => m.id}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 8 }}
         renderItem={renderItem}
-        ListEmptyComponent={<Text className="mt-8 px-6 text-center text-sm text-neutral-500 dark:text-neutral-400">{emptyHint}</Text>}
+        ListEmptyComponent={
+          <FeatureEmptyState
+            variant="compact"
+            icon="chat-bubble-outline"
+            title="No messages yet"
+            description={emptyHint}
+          />
+        }
       />
       <View
         className="border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900"

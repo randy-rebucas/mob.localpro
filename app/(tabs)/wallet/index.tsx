@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { walletService } from '@/core/services/walletService';
@@ -82,10 +83,10 @@ export default function WalletHomeScreen() {
         <Text className="text-center text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">All transactions</Text>
       </Pressable>
 
-      {w.recentActivity.length > 0 ? (
-        <View className="mt-8">
-          <Text className="mb-3 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Recent activity</Text>
-          {w.recentActivity.map((t) => (
+      <View className="mt-8">
+        <Text className="mb-3 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Recent activity</Text>
+        {w.recentActivity.length > 0 ? (
+          w.recentActivity.map((t) => (
             <View
               key={t.id}
               className="mb-2 flex-row items-center justify-between rounded-2xl border border-neutral-200/90 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
@@ -101,9 +102,26 @@ export default function WalletHomeScreen() {
                 {formatPeso(t.amount, { signed: true })}
               </Text>
             </View>
-          ))}
-        </View>
-      ) : null}
+          ))
+        ) : (
+          <FeatureEmptyState
+            variant="compact"
+            icon="history"
+            title="No recent activity"
+            description="Wallet movements will appear here after you top up, withdraw, or fund a job."
+            primaryAction={{
+              label: 'View all transactions',
+              onPress: () => router.push('/wallet/transactions' as never),
+              accessibilityLabel: 'View all wallet transactions',
+            }}
+            secondaryAction={{
+              label: 'Add money',
+              onPress: () => router.push('/wallet/topup' as never),
+              accessibilityLabel: 'Add money to wallet',
+            }}
+          />
+        )}
+      </View>
     </ScrollView>
   );
 }

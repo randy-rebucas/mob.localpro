@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { BRAND } from '@/constants/brand';
 import { profileService } from '@/core/services/profileService';
 import type { SavedAddress } from '@/core/types/profile';
@@ -68,11 +69,22 @@ export default function ProfileAddressesScreen() {
         data={rows}
         keyExtractor={(a) => a.id}
         contentContainerClassName="grow px-4 pb-28 pt-3"
-        refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} />}
+        contentContainerStyle={rows.length === 0 ? { flexGrow: 1 } : undefined}
+        refreshControl={
+          <RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={BRAND.navy} />
+        }
         ListEmptyComponent={
-          <Text className="mt-10 px-2 text-center text-sm text-neutral-500 dark:text-neutral-400">
-            No saved addresses yet. Add your home or work location for faster job bookings.
-          </Text>
+          <FeatureEmptyState
+            variant="full"
+            icon="place"
+            title="No saved addresses"
+            description="Add a home or work address to speed up booking and show clearer job locations."
+            primaryAction={{
+              label: 'Add address',
+              onPress: () => router.push('/profile/address-form' as never),
+              accessibilityLabel: 'Add a new address',
+            }}
+          />
         }
         renderItem={({ item }) => (
           <View className="mb-3 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">

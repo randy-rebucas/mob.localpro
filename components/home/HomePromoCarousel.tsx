@@ -5,19 +5,23 @@ import { useRef, useState } from 'react';
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import type { PromoBanner } from '@/components/home/promoData';
+import { BRAND } from '@/constants/brand';
 
 type Props = {
   promos: PromoBanner[];
   gap?: number;
+  /** When set (e.g. sign-in gate on home), used instead of `router.push` for promo `href`s. */
+  navigate?: (href: string) => void;
 };
 
-export function HomePromoCarousel({ promos, gap = 12 }: Props) {
+export function HomePromoCarousel({ promos, gap = 12, navigate }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const horizontalPad = 20;
   const cardWidth = windowWidth - horizontalPad * 2;
   const step = cardWidth + gap;
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
+  const go = navigate ?? ((href: string) => router.push(href as never));
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
@@ -49,14 +53,14 @@ export function HomePromoCarousel({ promos, gap = 12 }: Props) {
             accessibilityRole="button"
             accessibilityLabel={`${item.title}. ${item.subtitle}`}
             onPressIn={() => void Haptics.selectionAsync()}
-            onPress={() => router.push(item.href as never)}
+            onPress={() => go(item.href)}
             style={{ width: cardWidth }}
             className="overflow-hidden rounded-2xl bg-white shadow-sm dark:bg-neutral-900">
             <View className="flex-row">
               <View className={`w-1.5 ${item.accentClass}`} />
               <View className="flex-1 flex-row items-center px-4 py-4">
                 <View className="mr-3 h-12 w-12 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800">
-                  <MaterialIcons name={item.icon} size={26} color="#0d9488" />
+                  <MaterialIcons name={item.icon} size={26} color={BRAND.navy} />
                 </View>
                 <View className="min-w-0 flex-1 pr-1">
                   <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-50" numberOfLines={1}>
@@ -67,7 +71,7 @@ export function HomePromoCarousel({ promos, gap = 12 }: Props) {
                   </Text>
                   <View className="mt-2 flex-row items-center gap-1">
                     <Text className="text-sm font-semibold text-brand dark:text-brand-muted">{item.cta}</Text>
-                    <MaterialIcons name="arrow-forward" size={16} color="#0d9488" />
+                    <MaterialIcons name="arrow-forward" size={16} color={BRAND.navy} />
                   </View>
                 </View>
               </View>

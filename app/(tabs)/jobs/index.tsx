@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { categoryService } from '@/core/services/categoryService';
@@ -214,13 +215,17 @@ export default function JobsListScreen() {
   }
 
   const categories = categoriesQuery.data ?? [];
+  const hasFilters = filterKey !== 'all' || !!categoryId;
 
   return (
     <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
       <FlatList
         data={jobs}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void query.refetch()} />}
+        contentContainerStyle={jobs.length === 0 ? { flexGrow: 1 } : undefined}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void query.refetch()} tintColor={BRAND.navy} />
+        }
         onEndReached={onEndReached}
         onEndReachedThreshold={0.35}
         ListHeaderComponent={
@@ -258,9 +263,33 @@ export default function JobsListScreen() {
         }
         renderItem={({ item }) => <JobRow item={item} />}
         ListEmptyComponent={
-          <Text className="mt-10 px-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-            No jobs match these filters. Try another status or category, or post a new job.
-          </Text>
+          <FeatureEmptyState
+            variant="full"
+            icon="work-off"
+            title={hasFilters ? 'No jobs match these filters' : 'No jobs to show'}
+            description={
+              hasFilters
+                ? 'Try another status or category, reset filters to see everything, or post a new job to the marketplace.'
+                : 'Nothing is listed in this view right now. Post a job or check back soon.'
+            }
+            primaryAction={{
+              label: 'Post a job',
+              onPress: () => router.push('/jobs/new' as never),
+              accessibilityLabel: 'Post a new job',
+            }}
+            secondaryAction={
+              hasFilters
+                ? {
+                    label: 'Reset filters',
+                    onPress: () => {
+                      setFilterKey('all');
+                      setCategoryId('');
+                    },
+                    accessibilityLabel: 'Reset job filters',
+                  }
+                : undefined
+            }
+          />
         }
       />
     </View>

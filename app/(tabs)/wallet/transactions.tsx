@@ -1,6 +1,8 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import { ActivityIndicator, FlatList, RefreshControl, Pressable, Text, View } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { walletService } from '@/core/services/walletService';
@@ -21,7 +23,7 @@ export default function WalletTransactionsScreen() {
 
   if (query.isPending) {
     return (
-      <View className="flex-1 gap-3 bg-neutral-50 p-4 dark:bg-neutral-950">
+      <View className="flex-1 gap-3 bg-[#eef2f7] p-4 dark:bg-neutral-950">
         {[1, 2, 3, 4].map((k) => (
           <SkeletonBlock key={k} className="h-14 w-full" />
         ))}
@@ -31,7 +33,7 @@ export default function WalletTransactionsScreen() {
 
   if (query.isError) {
     return (
-      <View className="flex-1 justify-center bg-neutral-50 px-6 dark:bg-neutral-950">
+      <View className="flex-1 justify-center bg-[#eef2f7] px-6 dark:bg-neutral-950">
         <Text className="text-center text-base font-semibold text-neutral-900 dark:text-neutral-50">Couldn&apos;t load transactions</Text>
         <Text className="mt-2 text-center text-sm text-neutral-600 dark:text-neutral-400">
           {getApiErrorMessage(query.error)}
@@ -47,11 +49,14 @@ export default function WalletTransactionsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-neutral-50 dark:bg-neutral-950">
+    <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
       <FlatList
         data={flat}
         keyExtractor={(t) => t.id}
-        refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} />}
+        contentContainerStyle={flat.length === 0 ? { flexGrow: 1 } : undefined}
+        refreshControl={
+          <RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={BRAND.navy} />
+        }
         onEndReached={() => {
           if (query.hasNextPage && !query.isFetchingNextPage) {
             void query.fetchNextPage();
@@ -79,9 +84,22 @@ export default function WalletTransactionsScreen() {
           </View>
         )}
         ListEmptyComponent={
-          <Text className="mt-12 px-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-            No wallet transactions yet. Top up or fund a job to see activity here.
-          </Text>
+          <FeatureEmptyState
+            variant="full"
+            icon="receipt-long"
+            title="No transactions yet"
+            description="Top up your wallet or fund a job — credits, debits, and escrow movements show up here."
+            primaryAction={{
+              label: 'Add money',
+              onPress: () => router.push('/wallet/topup' as never),
+              accessibilityLabel: 'Add money to wallet',
+            }}
+            secondaryAction={{
+              label: 'Browse jobs',
+              onPress: () => router.push('/jobs' as never),
+              accessibilityLabel: 'Browse jobs',
+            }}
+          />
         }
       />
     </View>

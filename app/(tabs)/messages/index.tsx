@@ -3,6 +3,7 @@ import { Stack, router } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { messageService, type ThreadSummary } from '@/core/services/messageService';
@@ -79,11 +80,17 @@ export default function MessagesListScreen() {
             </Text>
           </Pressable>
         </View>
-        <View className="flex-1 items-center justify-center px-8 pb-16">
-          <Text className="text-center text-sm text-neutral-500 dark:text-neutral-400">
-            Conversations appear here after you start chat from a job.
-          </Text>
-        </View>
+        <FeatureEmptyState
+          variant="full"
+          icon="forum"
+          title="Your inbox is empty"
+          description="After you sign in, job chats show up here. Find work you need, then message the provider from the job screen."
+          secondaryAction={{
+            label: 'Browse open jobs',
+            onPress: () => router.push('/jobs' as never),
+            accessibilityLabel: 'Browse open jobs',
+          }}
+        />
       </View>
     );
   }
@@ -117,6 +124,8 @@ export default function MessagesListScreen() {
     );
   }
 
+  const threads = threadsQuery.data ?? [];
+
   return (
     <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
       <Stack.Screen
@@ -125,9 +134,13 @@ export default function MessagesListScreen() {
         }}
       />
       <FlatList
-        data={threadsQuery.data ?? []}
+        data={threads}
         keyExtractor={(t) => t.id}
-        contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
+        contentContainerStyle={
+          threads.length === 0
+            ? { flexGrow: 1, paddingTop: 8, paddingBottom: 24 }
+            : { paddingTop: 8, paddingBottom: 24 }
+        }
         refreshControl={
           <RefreshControl
             refreshing={threadsQuery.isRefetching || unreadQuery.isRefetching}
@@ -140,9 +153,22 @@ export default function MessagesListScreen() {
         }
         renderItem={({ item }) => <Row item={item} />}
         ListEmptyComponent={
-          <Text className="mt-10 px-6 text-center text-sm leading-6 text-neutral-500 dark:text-neutral-400">
-            No conversations yet. Open a job and tap Chat to message your provider.
-          </Text>
+          <FeatureEmptyState
+            variant="full"
+            icon="forum"
+            title="No conversations yet"
+            description="When you chat on a job, the thread appears here so you can pick up where you left off."
+            steps={[
+              { number: '1', text: 'Open the Jobs tab and choose a listing.' },
+              { number: '2', text: 'Open the job, then tap Chat.' },
+              { number: '3', text: 'Send a message — it will show up here.' },
+            ]}
+            primaryAction={{
+              label: 'Browse jobs',
+              onPress: () => router.push('/jobs' as never),
+              accessibilityLabel: 'Go to jobs to find a listing',
+            }}
+          />
         }
       />
     </View>

@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { jobService } from '@/core/services/jobService';
@@ -135,17 +136,34 @@ export default function JobQuotesScreen() {
 
   const busyAccept = acceptMutation.isPending;
   const busyReject = rejectMutation.isPending;
+  const quotes = query.data ?? [];
 
   return (
     <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
       <FlatList
-        data={query.data ?? []}
+        data={quotes}
         keyExtractor={(q) => q.id}
-        refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} />}
+        contentContainerStyle={quotes.length === 0 ? { flexGrow: 1 } : undefined}
+        refreshControl={
+          <RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={BRAND.navy} />
+        }
         ListEmptyComponent={
-          <Text className="mt-10 px-4 text-center text-neutral-500 dark:text-neutral-400">
-            No quotes yet. Providers will appear here when they respond.
-          </Text>
+          <FeatureEmptyState
+            variant="full"
+            icon="request-quote"
+            title="No quotes yet"
+            description="When providers respond with a price and message, their quotes will appear here."
+            steps={[
+              { number: '1', text: 'Share enough detail in the job so providers can quote accurately.' },
+              { number: '2', text: "Wait for responses — you'll get a notification when a quote arrives." },
+            ]}
+            stepsSectionTitle="What happens next"
+            primaryAction={{
+              label: 'Back to job',
+              onPress: () => router.push(`/jobs/${jobId}` as never),
+              accessibilityLabel: 'Back to job details',
+            }}
+          />
         }
         renderItem={({ item }) => (
           <QuoteRow

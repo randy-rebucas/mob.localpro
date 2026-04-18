@@ -17,18 +17,7 @@ function iconFor(type: AnnouncementType): ComponentProps<typeof MaterialIcons>['
   }
 }
 
-function toneClasses(type: AnnouncementType): { border: string; icon: string } {
-  switch (type) {
-    case 'warning':
-      return { border: 'border-l-[4px] border-l-amber-500', icon: '#d97706' };
-    case 'success':
-      return { border: 'border-l-[4px] border-l-emerald-500', icon: '#059669' };
-    case 'danger':
-      return { border: 'border-l-[4px] border-l-red-500', icon: '#dc2626' };
-    default:
-      return { border: 'border-l-[4px] border-l-sky-500', icon: '#0284c7' };
-  }
-}
+const ANNOUNCEMENT_BG = 'rgb(62, 165, 62)';
 
 type Props = {
   items: Announcement[];
@@ -48,17 +37,17 @@ export function HomeAnnouncements({ items }: Props) {
       </View>
       <View className="gap-2">
         {items.slice(0, 4).map((a) => {
-          const { border, icon } = toneClasses(a.type);
           return (
             <View
               key={a.id}
-              className={`flex-row overflow-hidden rounded-xl border border-y border-r border-neutral-200 bg-white pl-3 dark:border-neutral-800 dark:bg-neutral-900 ${border}`}>
+              className="flex-row overflow-hidden rounded-xl border border-white/25 pl-3"
+              style={{ backgroundColor: ANNOUNCEMENT_BG }}>
               <View className="py-3 pr-2">
-                <MaterialIcons name={iconFor(a.type)} size={22} color={icon} />
+                <MaterialIcons name={iconFor(a.type)} size={22} color="#ffffff" />
               </View>
               <View className="min-w-0 flex-1 py-3 pr-3">
-                <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{a.title}</Text>
-                <Text className="mt-0.5 text-xs leading-5 text-neutral-600 dark:text-neutral-400">{a.message}</Text>
+                <Text className="text-sm font-semibold text-white">{a.title}</Text>
+                <Text className="mt-0.5 text-xs leading-5 text-white/90">{a.message}</Text>
               </View>
             </View>
           );
