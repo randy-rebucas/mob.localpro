@@ -1,5 +1,9 @@
+import { API } from '@/core/api/endpoints';
+import { jobFromApi, quoteFromApi } from '@/core/api/normalize';
 import { api } from '@/core/api/client';
 import type { Job, JobQuote, JobStatus } from '@/core/types/models';
+
+type UnknownRecord = Record<string, unknown>;
 
 const MOCK_JOBS: Job[] = [
   {
@@ -59,21 +63,28 @@ function useMocks(): boolean {
   return __DEV__;
 }
 
+function pickStatus(raw: unknown): JobStatus {
+  const s = typeof raw === 'string' ? raw : '';
+  const allowed: JobStatus[] = ['open', 'quoted', 'in_progress', 'completed', 'cancelled'];
+  return (allowed.includes(s as JobStatus) ? s : 'open') as JobStatus;
+}
+
 export const jobService = {
   async listJobs(): Promise<Job[]> {
     if (useMocks()) {
       return [...MOCK_JOBS];
     }
-    const { data } = await api.get<Job[]>('/api/jobs');
-    return data;
+    const { data } = await api.get<UnknownRecord | UnknownRecord[]>(API.jobs.list);
+    const rows = Array.isArray(data) ? data : Array.isArray(data.data) ? (data.data as UnknownRecord[]) : [];
+    return rows.map((row) => jobFromApi(row));
   },
 
   async getJob(id: string): Promise<Job | null> {
     if (useMocks()) {
       return MOCK_JOBS.find((j) => j.id === id) ?? null;
     }
-    const { data } = await api.get<Job>(`/api/jobs/${id}`);
-    return data;
+    const { data } = await api.get<UnknownRecord>(API.jobs.byId(id));
+    return jobFromApi(data);
   },
 
   async createJob(input: {
@@ -82,6 +93,7 @@ export const jobService = {
     budgetMin?: number;
     budgetMax?: number;
     locationLabel?: string;
+    categoryId?: string;
   }): Promise<Job> {
     if (useMocks()) {
       const job: Job = {
@@ -97,30 +109,46 @@ export const jobService = {
       MOCK_JOBS.unshift(job);
       return job;
     }
-    const { data } = await api.post<Job>('/api/jobs', input);
-    return data;
+    const budget = input.budgetMax ?? input.budgetMin;
+    const { data } = await api.post<UnknownRecord>(API.jobs.create, {
+      title: input.title,
+      description: input.description,
+      category: input.categoryId ?? 'general',
+      ...(budget != null ? { budget } : {}),
+      ...(input.locationLabel ? { location: input.locationLabel } : {}),
+    });
+    return jobFromApi(data);
   },
 
   async listQuotes(jobId: string): Promise<JobQuote[]> {
     if (useMocks()) {
       return MOCK_QUOTES[jobId] ?? [];
     }
-    const { data } = await api.get<JobQuote[]>(`/api/jobs/${jobId}/quotes`);
-    return data;
+    const { data } = await api.get<UnknownRecord[] | UnknownRecord>(API.jobs.quotes(jobId));
+    const rows = Array.isArray(data) ? data : Array.isArray(data.quotes) ? (data.quotes as UnknownRecord[]) : [];
+    return rows.map((row) => quoteFromApi(row, jobId));
   },
 
-  async acceptQuote(jobId: string, quoteId: string): Promise<{ status: JobStatus }> {
+  async acceptQuote(_jobId: string, quoteId: string): Promise<{ status: JobStatus }> {
     if (useMocks()) {
       return { status: 'in_progress' };
     }
-    const { data } = await api.post<{ status: JobStatus }>(`/api/jobs/${jobId}/quotes/${quoteId}/accept`);
-    return data;
+    const { data } = await api.post<UnknownRecord>(API.quotes.accept(quoteId));
+    const jobPayload = (data.job ?? data) as UnknownRecord;
+    if (jobPayload && typeof jobPayload === 'object' && 'status' in jobPayload) {
+      return { status: pickStatus(jobPayload.status) };
+    }
+    return { status: 'in_progress' };
   },
 
   async submitReview(jobId: string, rating: number, comment: string): Promise<void> {
     if (useMocks()) {
       return;
     }
-    await api.post(`/api/jobs/${jobId}/reviews`, { rating, comment });
+    await api.post(API.reviews.create, {
+      jobId,
+      rating,
+      feedback: comment,
+    });
   },
 };

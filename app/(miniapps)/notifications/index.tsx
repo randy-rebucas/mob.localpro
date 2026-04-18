@@ -2,20 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
-
-type NotificationRow = { id: string; title: string; body: string; at: string };
-
-async function fetchNotifications(): Promise<NotificationRow[]> {
-  return [
-    { id: 'n1', title: 'New quote', body: 'Spark Electric sent a quote.', at: new Date().toISOString() },
-    { id: 'n2', title: 'Escrow funded', body: '₱3,200 held for your job.', at: new Date().toISOString() },
-  ];
-}
+import { notificationService } from '@/core/services/notificationService';
 
 export default function NotificationsScreen() {
   const { data, isPending, isRefetching, refetch } = useQuery({
     queryKey: ['notifications'],
-    queryFn: fetchNotifications,
+    queryFn: () => notificationService.list(),
   });
 
   if (isPending) {
@@ -38,6 +30,7 @@ export default function NotificationsScreen() {
           <View className="mx-4 mb-3 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
             <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-50">{item.title}</Text>
             <Text className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{item.body}</Text>
+            <Text className="mt-2 text-xs text-neutral-400">{new Date(item.at).toLocaleString()}</Text>
           </View>
         )}
       />

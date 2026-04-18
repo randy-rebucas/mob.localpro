@@ -1,3 +1,4 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useMutation } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -33,7 +34,11 @@ export default function JobReviewScreen() {
             accessibilityLabel={`${star} stars`}
             onPress={() => setRating(star)}
             className="rounded-xl border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
-            <Text className={`text-lg ${star <= rating ? 'text-amber-500' : 'text-neutral-300'}`}>★</Text>
+            <MaterialIcons
+              name={star <= rating ? 'star' : 'star-border'}
+              size={22}
+              color={star <= rating ? '#f59e0b' : '#d4d4d8'}
+            />
           </Pressable>
         ))}
       </View>

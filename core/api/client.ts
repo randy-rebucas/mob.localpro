@@ -1,7 +1,8 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-import { API_BASE_URL } from '@/core/constants/env';
+import { API } from '@/core/api/endpoints';
 import { refreshSessionRequest } from '@/core/api/sessionRefresh';
+import { API_BASE_URL } from '@/core/constants/env';
 import { useSessionStore } from '@/core/stores/sessionStore';
 
 declare module 'axios' {
@@ -29,7 +30,7 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (status === 401 && !original.url?.includes('/api/auth/refresh')) {
+    if (status === 401 && !original.url?.includes(API.auth.refresh)) {
       original._retry = true;
       try {
         const user = await refreshSessionRequest();
