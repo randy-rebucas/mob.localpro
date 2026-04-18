@@ -77,14 +77,20 @@ export const authService = {
   },
 
   async verifyPhoneOtp(phone: string, code: string): Promise<User> {
-    const { data } = await api.post<{ user?: UnknownRecord; message?: string }>(API.auth.phoneVerify, {
-      phone: phone.trim(),
-      code: code.trim(),
-    });
+    const { data } = await api.post<{ user?: UnknownRecord; refreshToken?: string; message?: string }>(
+      API.auth.phoneVerify,
+      {
+        phone: phone.trim(),
+        code: code.trim(),
+      }
+    );
     if (!data.user) {
       throw new Error(data.message ?? 'Verification failed');
     }
     const user = userFromApi(data.user);
+    if (data.refreshToken) {
+      await setStoredRefreshToken(data.refreshToken);
+    }
     useSessionStore.getState().setUser(user);
     return user;
   },

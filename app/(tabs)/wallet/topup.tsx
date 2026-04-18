@@ -9,7 +9,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 

@@ -137,6 +137,8 @@ export const API = {
     convertToJob: (id: string) => `/api/consultations/${id}/convert-to-job`,
   },
   providers: {
+    /** Unauthenticated browse — see MOBILE_PROVIDERS_IMPLEMENTATION_GUIDE.md */
+    publicList: '/api/public/providers',
     list: '/api/providers',
     /** Public directory search (`q`, `skill`, `page`, `limit`) — see MOBILE_PROVIDER_DISCOVERY_GUIDE.md */
     search: '/api/providers/search',

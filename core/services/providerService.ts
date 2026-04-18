@@ -12,7 +12,7 @@ export type ProviderListItem = {
   isFavorite?: boolean;
   avatarUrl?: string;
   availability?: ProviderAvailability;
-  /** Up to a few skill labels for list rows */
+  /** Skill labels (UI may show first 3 + overflow) */
   skills: string[];
   avgRating?: number;
   reviewCount?: number;
@@ -27,6 +27,21 @@ export type ProviderListItem = {
   /** Map pin when API includes coordinates on list rows */
   lat?: number;
   lng?: number;
+  /** Authenticated list metadata (MOBILE_PROVIDERS_IMPLEMENTATION_GUIDE.md) */
+  isFeatured?: boolean;
+  isTopSearch?: boolean;
+  isLocalProCertified?: boolean;
+  completionRate?: number;
+  avgResponseTimeHours?: number;
+};
+
+export type ProviderListResult = {
+  items: ProviderListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  topSkills: string[];
 };
 
 export type ProviderProfile = {
@@ -48,6 +63,11 @@ export type ProviderProfile = {
   responseRatePercent?: number;
   avgResponseTimeMinutes?: number;
   acceptanceRatePercent?: number;
+  isFeatured?: boolean;
+  isTopSearch?: boolean;
+  isLocalProCertified?: boolean;
+  completionRate?: number;
+  avgResponseTimeHours?: number;
 };
 
 export type ProviderReviewRow = {
@@ -62,6 +82,9 @@ export type ProviderReviewRow = {
 export type ProviderListParams = {
   search?: string;
   availability?: 'available' | 'busy' | 'unavailable';
+  skill?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export function formatProviderAvailability(a: ProviderAvailability | undefined): string {
@@ -181,6 +204,13 @@ function extractSkillLabels(raw: unknown, max: number): string[] {
   return out;
 }
 
+function extractPublicProviderRows(data: unknown): UnknownRecord[] {
+  if (data && typeof data === 'object' && 'providers' in data && Array.isArray((data as { providers: unknown }).providers)) {
+    return (data as { providers: UnknownRecord[] }).providers;
+  }
+  return extractRows(data);
+}
+
 function extractRows(data: unknown): UnknownRecord[] {
   if (Array.isArray(data)) return data as UnknownRecord[];
   if (data && typeof data === 'object' && 'providers' in data && Array.isArray((data as { providers: unknown }).providers)) {
@@ -202,6 +232,55 @@ function extractRows(data: unknown): UnknownRecord[] {
     return (data as { savedProviders: UnknownRecord[] }).savedProviders;
   }
   return [];
+}
+
+function parseTopSkills(o: UnknownRecord): string[] {
+  const raw = o.topSkills;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+}
+
+function buildListResult(
+  data: unknown,
+  rows: UnknownRecord[],
+  page: number,
+  defaultPageSize: number
+): ProviderListResult {
+  const items = rows.map(mapListItem).filter((p) => p.id.length > 0);
+  if (Array.isArray(data)) {
+    const n = items.length;
+    return {
+      items,
+      total: n,
+      page: 1,
+      pageSize: n || defaultPageSize,
+      totalPages: 1,
+      topSkills: [],
+    };
+  }
+  let total = items.length;
+  let pageSize = defaultPageSize;
+  let totalPages = Math.max(1, Math.ceil(total / pageSize));
+  let topSkills: string[] = [];
+
+  if (data && typeof data === 'object') {
+    const o = data as UnknownRecord;
+    topSkills = parseTopSkills(o);
+    const t = pickNumber(o.total);
+    const ps = pickNumber(o.pageSize) ?? pickNumber(o.limit);
+    const tp = pickNumber(o.totalPages);
+    const p = pickNumber(o.page);
+    if (t != null) total = t;
+    if (ps != null) pageSize = ps;
+    if (p != null && p > 0) page = p;
+    if (tp != null) {
+      totalPages = tp;
+    } else if (pageSize > 0) {
+      totalPages = Math.max(1, Math.ceil(total / pageSize));
+    }
+  }
+
+  return { items, total, page, pageSize, totalPages, topSkills };
 }
 
 /**
@@ -226,7 +305,12 @@ function mergeProviderDetailEnvelope(raw: UnknownRecord): UnknownRecord {
 function mapListItem(row: UnknownRecord): ProviderListItem {
   const wrapped = row.provider as UnknownRecord | undefined;
   const core = wrapped && typeof wrapped === 'object' ? wrapped : row;
-  const user = (row.user ?? core.user) as UnknownRecord | undefined;
+  const userIdObj = row.userId;
+  const userFromUserId =
+    typeof userIdObj === 'object' && userIdObj !== null && !Array.isArray(userIdObj)
+      ? (userIdObj as UnknownRecord)
+      : undefined;
+  const user = (row.user ?? core.user ?? userFromUserId) as UnknownRecord | undefined;
   const profile = (row.profile ?? core.profile) as UnknownRecord | undefined;
 
   const name = pickProviderDisplayName(row, core, profile ?? {}, user ?? {});
@@ -248,7 +332,7 @@ function mapListItem(row: UnknownRecord): ProviderListItem {
     pickNumber(addr?.lng);
 
   const skillsRaw = row.skills ?? core.skills ?? user?.skills ?? profile?.skills;
-  const skills = extractSkillLabels(skillsRaw, 5);
+  const skills = extractSkillLabels(skillsRaw, 20);
   const rating =
     pickNumber(row.avgRating) ??
     pickNumber(core.avgRating) ??
@@ -279,12 +363,18 @@ function mapListItem(row: UnknownRecord): ProviderListItem {
     wrapped && typeof wrapped === 'object'
       ? (wrapped as UnknownRecord)._id ?? (wrapped as UnknownRecord).id
       : undefined;
+  const userIdString = typeof row.userId === 'string' ? row.userId : undefined;
+  const fromNestedUserId =
+    userFromUserId != null
+      ? String(userFromUserId._id ?? userFromUserId.id ?? '').trim() || undefined
+      : undefined;
   const id = String(
     row.providerId ??
       nestedProviderId ??
+      fromNestedUserId ??
       row._id ??
       row.id ??
-      row.userId ??
+      userIdString ??
       core._id ??
       core.id ??
       core.userId ??
@@ -292,6 +382,30 @@ function mapListItem(row: UnknownRecord): ProviderListItem {
       user?.id ??
       ''
   );
+
+  const isFeatured =
+    typeof row.isFeatured === 'boolean'
+      ? row.isFeatured
+      : typeof core.isFeatured === 'boolean'
+        ? core.isFeatured
+        : undefined;
+  const isTopSearch =
+    typeof row.isTopSearch === 'boolean'
+      ? row.isTopSearch
+      : typeof core.isTopSearch === 'boolean'
+        ? core.isTopSearch
+        : undefined;
+  const isLocalProCertified =
+    typeof row.isLocalProCertified === 'boolean'
+      ? row.isLocalProCertified
+      : typeof core.isLocalProCertified === 'boolean'
+        ? core.isLocalProCertified
+        : undefined;
+  const completionRate = pickNumber(row.completionRate) ?? pickNumber(core.completionRate);
+  const avgResponseTimeHours =
+    pickNumber(row.avgResponseTimeHours) ??
+    pickNumber(row.avgResponseTime) ??
+    pickNumber(core.avgResponseTimeHours);
 
   return {
     id,
@@ -314,6 +428,11 @@ function mapListItem(row: UnknownRecord): ProviderListItem {
     distanceKm,
     lat,
     lng,
+    isFeatured,
+    isTopSearch,
+    isLocalProCertified,
+    completionRate,
+    avgResponseTimeHours,
   };
 }
 
@@ -331,15 +450,37 @@ function mapSkillEntry(s: unknown): ProviderProfile['skills'][0] | null {
 }
 
 export const providerService = {
-  async list(params?: ProviderListParams): Promise<ProviderListItem[]> {
-    const q = params?.search?.trim() ?? '';
-    const { data } = await api.get<unknown>(API.providers.list, {
+  /**
+   * Public provider directory (no auth). Supports `q`, `skill`, `page` per MOBILE_PROVIDERS_IMPLEMENTATION_GUIDE.md.
+   */
+  async listPublic(params?: { q?: string; skill?: string; page?: number }): Promise<ProviderListResult> {
+    const page = params?.page ?? 1;
+    const { data } = await api.get<unknown>(API.providers.publicList, {
       params: {
-        ...(q ? { search: q, q } : {}),
-        ...(params?.availability ? { availability: params.availability } : {}),
+        ...(params?.q?.trim() ? { q: params.q.trim() } : {}),
+        ...(params?.skill?.trim() ? { skill: params.skill.trim() } : {}),
+        page,
       },
     });
-    return extractRows(data).map(mapListItem).filter((p) => p.id.length > 0);
+    const rows = extractPublicProviderRows(data);
+    return buildListResult(data, rows, page, 24);
+  },
+
+  async list(params?: ProviderListParams): Promise<ProviderListResult> {
+    const q = params?.search?.trim() ?? '';
+    const page = params?.page ?? 1;
+    const pageSize = params?.pageSize ?? 24;
+    const { data } = await api.get<unknown>(API.providers.list, {
+      params: {
+        ...(q.length >= 2 ? { search: q, q } : {}),
+        ...(params?.availability ? { availability: params.availability } : {}),
+        ...(params?.skill?.trim() ? { skill: params.skill.trim() } : {}),
+        page,
+        limit: pageSize,
+      },
+    });
+    const rows = extractRows(data);
+    return buildListResult(data, rows, page, pageSize);
   },
 
   async getProfile(providerId: string): Promise<ProviderProfile> {
@@ -398,6 +539,17 @@ export const providerService = {
       responseRatePercent: pickNumber(data.responseRatePercent) ?? pickNumber(profile?.responseRatePercent),
       avgResponseTimeMinutes: pickNumber(data.avgResponseTimeMinutes) ?? pickNumber(profile?.avgResponseTimeMinutes),
       acceptanceRatePercent: pickNumber(data.acceptanceRatePercent) ?? pickNumber(profile?.acceptanceRatePercent),
+      isFeatured: typeof data.isFeatured === 'boolean' ? data.isFeatured : undefined,
+      isTopSearch: typeof data.isTopSearch === 'boolean' ? data.isTopSearch : undefined,
+      isLocalProCertified:
+        typeof data.isLocalProCertified === 'boolean'
+          ? data.isLocalProCertified
+          : typeof profile?.isLocalProCertified === 'boolean'
+            ? (profile.isLocalProCertified as boolean)
+            : undefined,
+      completionRate: pickNumber(data.completionRate) ?? pickNumber(profile?.completionRate),
+      avgResponseTimeHours:
+        pickNumber(data.avgResponseTimeHours) ?? pickNumber(data.avgResponseTime) ?? pickNumber(profile?.avgResponseTimeHours),
     };
   },
 

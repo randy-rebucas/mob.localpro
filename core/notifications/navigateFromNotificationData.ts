@@ -11,6 +11,20 @@ function pickString(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
 }
 
+/** Reject open redirects and path traversal from push `actionUrl` payloads. */
+export function isSafeInternalHref(path: string): boolean {
+  const pathOnly = path.split('?')[0] ?? '';
+  if (!pathOnly.startsWith('/') || pathOnly.startsWith('//')) {
+    return false;
+  }
+  for (const seg of pathOnly.split('/')) {
+    if (seg === '..' || seg === '.') {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Normalize web or absolute URLs to an in-app path (`/…`). */
 export function normalizeActionUrlToPath(actionUrl: string): string {
   const raw = actionUrl.trim();
@@ -34,7 +48,7 @@ export function notificationDataToHref(data: AppNotificationData | undefined): H
   const action = pickString(data.actionUrl);
   if (action) {
     const path = normalizeActionUrlToPath(action);
-    if (path.startsWith('/')) {
+    if (path.startsWith('/') && isSafeInternalHref(path)) {
       return path as Href;
     }
   }

@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 
+import { RootErrorBoundary } from '@/components/RootErrorBoundary';
 import { AppProviders } from '@/providers/AppProviders';
 import { AuthSessionProvider } from '@/providers/AuthSessionProvider';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -22,15 +23,17 @@ export default function RootLayout() {
   return (
     <AppProviders>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthSessionProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(miniapps)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'About' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </AuthSessionProvider>
+        <RootErrorBoundary>
+          <AuthSessionProvider>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(miniapps)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'About' }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </AuthSessionProvider>
+        </RootErrorBoundary>
       </ThemeProvider>
     </AppProviders>
   );

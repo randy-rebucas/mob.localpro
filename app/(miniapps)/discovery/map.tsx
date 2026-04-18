@@ -24,14 +24,17 @@ export default function DiscoveryMapScreen() {
   const mapKey = `${region.latitude.toFixed(4)}-${region.longitude.toFixed(4)}`;
 
   const providersQuery = useQuery({
-    queryKey: ['providers', 'mapPins'],
-    queryFn: () => providerService.list(),
-    enabled: !!user,
+    queryKey: ['providers', 'mapPins', user?.id ?? 'guest'],
+    queryFn: async () => {
+      const res = user
+        ? await providerService.list({ page: 1, pageSize: 200 })
+        : await providerService.listPublic({ page: 1 });
+      return res.items;
+    },
     staleTime: 60_000,
   });
 
   useEffect(() => {
-    if (!user) return;
     let cancelled = false;
     void (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -57,21 +60,12 @@ export default function DiscoveryMapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, []);
 
   const pins = useMemo(() => {
     const rows = providersQuery.data ?? [];
     return rows.filter((r) => typeof r.lat === 'number' && typeof r.lng === 'number');
   }, [providersQuery.data]);
-
-  if (!user) {
-    return (
-      <View className="flex-1 items-center justify-center bg-[#eef2f7] px-6 dark:bg-neutral-950">
-        <Stack.Screen options={{ title: 'Map', headerLeft: () => <MiniappHeaderBackButton /> }} />
-        <Text className="text-center text-base text-neutral-700 dark:text-neutral-300">Sign in to view the map.</Text>
-      </View>
-    );
-  }
 
   return (
     <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
@@ -103,6 +97,13 @@ export default function DiscoveryMapScreen() {
               />
             ))}
           </MapView>
+          {!user ? (
+            <View className="absolute top-3 left-3 right-3 rounded-xl border border-neutral-200 bg-white/95 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900/95">
+              <Text className="text-center text-xs text-neutral-600 dark:text-neutral-400">
+                Guest map · Sign in from the list to save favorites and see full profile details.
+              </Text>
+            </View>
+          ) : null}
           {pins.length === 0 ? (
             <View className="absolute bottom-4 left-4 right-4 rounded-2xl border border-neutral-200 bg-white/95 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/95">
               <Text className="text-center text-sm text-neutral-700 dark:text-neutral-300">

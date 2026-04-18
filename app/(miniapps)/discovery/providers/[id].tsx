@@ -180,6 +180,28 @@ export default function ProviderProfileScreen() {
             <Text className="mt-3 text-center text-2xl font-bold text-neutral-900 dark:text-neutral-50">
               {p.displayName}
             </Text>
+            {p.isFeatured || p.isTopSearch || p.isLocalProCertified ? (
+              <View className="mt-2 flex-row flex-wrap justify-center gap-2">
+                {p.isFeatured ? (
+                  <View className="flex-row items-center rounded-full bg-amber-100 px-2 py-1 dark:bg-amber-900/40">
+                    <MaterialIcons name="star" size={14} color="#b45309" />
+                    <Text className="ml-0.5 text-[11px] font-bold text-amber-900 dark:text-amber-200">Featured</Text>
+                  </View>
+                ) : null}
+                {p.isTopSearch ? (
+                  <View className="flex-row items-center rounded-full bg-sky-100 px-2 py-1 dark:bg-sky-900/40">
+                    <MaterialIcons name="trending-up" size={14} color="#0369a1" />
+                    <Text className="ml-0.5 text-[11px] font-bold text-sky-900 dark:text-sky-200">Top search</Text>
+                  </View>
+                ) : null}
+                {p.isLocalProCertified ? (
+                  <View className="flex-row items-center rounded-full bg-emerald-100 px-2 py-1 dark:bg-emerald-900/40">
+                    <MaterialIcons name="verified" size={14} color="#047857" />
+                    <Text className="ml-0.5 text-[11px] font-bold text-emerald-900 dark:text-emerald-200">Certified</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
             <View className="mt-2 flex-row flex-wrap items-center justify-center gap-2">
               {p.avgRating > 0 ? (
                 <View className="flex-row items-center rounded-full bg-amber-50 px-3 py-1 dark:bg-amber-900/35">
@@ -202,6 +224,8 @@ export default function ProviderProfileScreen() {
             <Text className="mt-3 text-center text-sm text-neutral-500 dark:text-neutral-400">
               {p.completedJobCount} job{p.completedJobCount === 1 ? '' : 's'} completed
               {typeof p.streak === 'number' ? ` · ${p.streak}★ review streak` : ''}
+              {p.completionRate != null ? ` · ${p.completionRate}% completion` : ''}
+              {p.avgResponseTimeHours != null ? ` · ~${p.avgResponseTimeHours}h response` : ''}
             </Text>
             {p.category != null && p.category.length > 0 ? (
               <Text className="mt-2 text-center text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">

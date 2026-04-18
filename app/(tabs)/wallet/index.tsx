@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { FeatureEmptyState } from '@/components/ui/FeatureEmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';

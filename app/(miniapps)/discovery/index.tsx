@@ -1,12 +1,14 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Stack, router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -97,6 +99,24 @@ const Row = memo(function Row({ item }: { item: ProviderListItem }) {
             ) : null}
           </View>
           <View className="mt-1.5 flex-row flex-wrap items-center gap-2">
+            {item.isFeatured ? (
+              <View className="flex-row items-center rounded-full bg-amber-100 px-1.5 py-0.5 dark:bg-amber-900/40">
+                <MaterialIcons name="star" size={12} color="#b45309" />
+                <Text className="ml-0.5 text-[10px] font-bold text-amber-900 dark:text-amber-200">Featured</Text>
+              </View>
+            ) : null}
+            {item.isTopSearch ? (
+              <View className="flex-row items-center rounded-full bg-sky-100 px-1.5 py-0.5 dark:bg-sky-900/40">
+                <MaterialIcons name="trending-up" size={12} color="#0369a1" />
+                <Text className="ml-0.5 text-[10px] font-bold text-sky-900 dark:text-sky-200">Top search</Text>
+              </View>
+            ) : null}
+            {item.isLocalProCertified ? (
+              <View className="flex-row items-center rounded-full bg-emerald-100 px-1.5 py-0.5 dark:bg-emerald-900/40">
+                <MaterialIcons name="verified" size={12} color="#047857" />
+                <Text className="ml-0.5 text-[10px] font-bold text-emerald-900 dark:text-emerald-200">Certified</Text>
+              </View>
+            ) : null}
             {item.avgRating != null && item.avgRating > 0 ? (
               <View className="flex-row items-center rounded-full bg-amber-50 px-2 py-0.5 dark:bg-amber-900/30">
                 <MaterialIcons name="star" size={14} color="#d97706" />
@@ -109,16 +129,29 @@ const Row = memo(function Row({ item }: { item: ProviderListItem }) {
               </View>
             ) : null}
             {item.availability ? <ListAvailabilityBadge status={item.availability} /> : null}
+            {item.completionRate != null ? (
+              <Text className="text-[10px] font-medium text-neutral-500 dark:text-neutral-400">{item.completionRate}% jobs done</Text>
+            ) : null}
+            {item.avgResponseTimeHours != null ? (
+              <Text className="text-[10px] font-medium text-neutral-500 dark:text-neutral-400">~{item.avgResponseTimeHours}h reply</Text>
+            ) : null}
           </View>
           {item.skills.length > 0 ? (
             <View className="mt-2 flex-row flex-wrap gap-1.5">
-              {item.skills.map((s, i) => (
+              {item.skills.slice(0, 3).map((s, i) => (
                 <View
                   key={`${s}-${i}`}
                   className="rounded-full border border-neutral-200 bg-[#eef2f7] px-2 py-0.5 dark:border-neutral-600 dark:bg-neutral-800">
                   <Text className="text-[11px] font-medium text-neutral-800 dark:text-neutral-200">{s}</Text>
                 </View>
               ))}
+              {item.skills.length > 3 ? (
+                <View className="rounded-full border border-neutral-300 bg-neutral-100 px-2 py-0.5 dark:border-neutral-600 dark:bg-neutral-800">
+                  <Text className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
+                    +{item.skills.length - 3}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
           {item.subtitle ? (
@@ -186,57 +219,76 @@ function AvailabilityChip({
   );
 }
 
+function SkillFilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      className={`mr-2 rounded-full border px-3 py-1.5 ${
+        selected ? 'border-transparent' : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900'
+      }`}
+      style={selected ? { backgroundColor: BRAND.navy } : undefined}>
+      <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-neutral-700 dark:text-neutral-300'}`}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function DiscoveryIndexScreen() {
   const user = useSessionStore((s) => s.user);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [availability, setAvailability] = useState<AvailabilityFilter>('all');
+  const [skillFilter, setSkillFilter] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(t);
   }, [search]);
 
-  const listParams = useMemo(
-    () => ({
-      search: debouncedSearch.length >= 2 ? debouncedSearch : undefined,
-      availability: availability === 'all' ? undefined : availability,
-    }),
-    [availability, debouncedSearch]
-  );
-
-  const providersQuery = useQuery({
-    queryKey: ['providers', 'list', listParams.search ?? '', listParams.availability ?? ''],
-    queryFn: () => providerService.list(listParams),
-    enabled: !!user,
-    staleTime: 30_000,
+  const providersInfinite = useInfiniteQuery({
+    queryKey: ['providers', 'infinite', user?.id ?? 'guest', debouncedSearch, availability, skillFilter ?? ''],
+    queryFn: async ({ pageParam }) => {
+      const page = pageParam as number;
+      if (user) {
+        return providerService.list({
+          search: debouncedSearch.length >= 2 ? debouncedSearch : undefined,
+          availability: availability === 'all' ? undefined : availability,
+          skill: skillFilter,
+          page,
+          pageSize: 24,
+        });
+      }
+      return providerService.listPublic({
+        q: debouncedSearch.length > 0 ? debouncedSearch : undefined,
+        skill: skillFilter,
+        page,
+      });
+    },
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+    staleTime: user ? 120_000 : 300_000,
   });
 
-  if (!user) {
-    return (
-      <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
-        <Stack.Screen
-          options={{
-            title: 'Find providers',
-            headerLeft: () => <MiniappHeaderBackButton />,
-          }}
-        />
-        <FeatureEmptyState
-          variant="full"
-          icon="travel-explore"
-          title="Sign in to browse providers"
-          description="Search approved providers, filter by availability, and open profiles after you sign in."
-          primaryAction={{
-            label: 'Sign in',
-            onPress: () => router.push('/login'),
-            accessibilityLabel: 'Sign in to find providers',
-          }}
-        />
-      </View>
-    );
-  }
+  const flatRows = useMemo(
+    () => providersInfinite.data?.pages.flatMap((p) => p.items) ?? [],
+    [providersInfinite.data?.pages]
+  );
 
-  if (providersQuery.isPending) {
+  const topSkills = providersInfinite.data?.pages[0]?.topSkills ?? [];
+  const lastMeta = providersInfinite.data?.pages[providersInfinite.data.pages.length - 1];
+
+  if (providersInfinite.isPending) {
     return (
       <View className="flex-1 gap-3 bg-[#eef2f7] p-4 dark:bg-neutral-950">
         <Stack.Screen
@@ -253,7 +305,7 @@ export default function DiscoveryIndexScreen() {
     );
   }
 
-  if (providersQuery.isError) {
+  if (providersInfinite.isError) {
     return (
       <View className="flex-1 justify-center bg-[#eef2f7] px-6 dark:bg-neutral-950">
         <Stack.Screen
@@ -267,10 +319,10 @@ export default function DiscoveryIndexScreen() {
           Couldn&apos;t load providers
         </Text>
         <Text className="mt-2 text-center text-sm text-neutral-600 dark:text-neutral-400">
-          {getApiErrorMessage(providersQuery.error, 'Pull to refresh or try again.')}
+          {getApiErrorMessage(providersInfinite.error, 'Pull to refresh or try again.')}
         </Text>
         <Pressable
-          onPress={() => void providersQuery.refetch()}
+          onPress={() => void providersInfinite.refetch()}
           className="mt-6 self-center rounded-2xl px-6 py-3 active:opacity-90"
           style={{ backgroundColor: BRAND.navy }}>
           <Text className="font-semibold text-white">Retry</Text>
@@ -278,8 +330,6 @@ export default function DiscoveryIndexScreen() {
       </View>
     );
   }
-
-  const rows = providersQuery.data ?? [];
 
   return (
     <View className="flex-1 bg-[#eef2f7] dark:bg-neutral-950">
@@ -300,45 +350,102 @@ export default function DiscoveryIndexScreen() {
         }}
       />
       <View className="border-b border-neutral-200 bg-white px-4 pb-3 pt-2 dark:border-neutral-800 dark:bg-neutral-900">
+        {!user ? (
+          <Pressable
+            onPress={() => router.push('/login')}
+            className="mb-3 rounded-xl border border-neutral-200 bg-[#eef2f7] px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-950">
+            <Text className="text-center text-sm font-medium text-neutral-800 dark:text-neutral-200">
+              Browsing as guest — tap to sign in for favorites, availability filter, and full profiles.
+            </Text>
+          </Pressable>
+        ) : null}
         <View className="flex-row items-center rounded-xl border border-neutral-200 bg-[#eef2f7] px-3 dark:border-neutral-700 dark:bg-neutral-950">
           <MaterialIcons name="search" size={22} color="#737373" />
           <TextInput
             accessibilityLabel="Search providers"
             className="ml-2 min-h-[44px] flex-1 py-2 text-base text-neutral-900 dark:text-neutral-100"
-            placeholder="Search by name or skill (min 2 characters)"
+            placeholder={user ? 'Search name, bio, skills (2+ chars)' : 'Search by name'}
             placeholderTextColor="#9ca3af"
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
           />
         </View>
-        <View className="mt-3 flex-row flex-wrap">
-          <AvailabilityChip label="All" value="all" selected={availability} onSelect={setAvailability} />
-          <AvailabilityChip label="Available" value="available" selected={availability} onSelect={setAvailability} />
-          <AvailabilityChip label="Busy" value="busy" selected={availability} onSelect={setAvailability} />
-          <AvailabilityChip
-            label="Unavailable"
-            value="unavailable"
-            selected={availability}
-            onSelect={setAvailability}
-          />
-        </View>
+        {user ? (
+          <View className="mt-3 flex-row flex-wrap">
+            <AvailabilityChip label="All" value="all" selected={availability} onSelect={setAvailability} />
+            <AvailabilityChip label="Available" value="available" selected={availability} onSelect={setAvailability} />
+            <AvailabilityChip label="Busy" value="busy" selected={availability} onSelect={setAvailability} />
+            <AvailabilityChip
+              label="Unavailable"
+              value="unavailable"
+              selected={availability}
+              onSelect={setAvailability}
+            />
+          </View>
+        ) : (
+          <Text className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+            Availability filters are available after you sign in.
+          </Text>
+        )}
+        {topSkills.length > 0 ? (
+          <View className="mt-3">
+            <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              Popular skills
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <SkillFilterChip
+                label="All skills"
+                selected={skillFilter === undefined}
+                onPress={() => setSkillFilter(undefined)}
+              />
+              {topSkills.map((s) => (
+                <SkillFilterChip
+                  key={s}
+                  label={s}
+                  selected={skillFilter === s}
+                  onPress={() => setSkillFilter((cur) => (cur === s ? undefined : s))}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
         <Text className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-          Type at least two characters to narrow results; otherwise the full list loads with your availability filter.
+          {user
+            ? 'Type at least two characters to narrow text search; scroll down to load more pages when available.'
+            : 'Public directory: tap a skill when shown, or search by name. Sign in for the full authenticated list.'}
         </Text>
+        {lastMeta && lastMeta.totalPages > 1 ? (
+          <Text className="mt-1 text-center text-xs text-neutral-500 dark:text-neutral-400">
+            Page {lastMeta.page} of {lastMeta.totalPages} · {lastMeta.total} providers
+          </Text>
+        ) : null}
       </View>
       <FlatList
-        data={rows}
+        data={flatRows}
         keyExtractor={(item) => item.id}
         contentContainerStyle={
-          rows.length === 0 ? { flexGrow: 1, paddingTop: 8, paddingBottom: 24 } : { paddingTop: 8, paddingBottom: 24 }
+          flatRows.length === 0 ? { flexGrow: 1, paddingTop: 8, paddingBottom: 24 } : { paddingTop: 8, paddingBottom: 24 }
         }
+        onEndReached={() => {
+          if (providersInfinite.hasNextPage && !providersInfinite.isFetchingNextPage) {
+            void providersInfinite.fetchNextPage();
+          }
+        }}
+        onEndReachedThreshold={0.35}
         refreshControl={
           <RefreshControl
-            refreshing={providersQuery.isRefetching}
-            onRefresh={() => void providersQuery.refetch()}
+            refreshing={providersInfinite.isRefetching && !providersInfinite.isFetchingNextPage}
+            onRefresh={() => void providersInfinite.refetch()}
             tintColor={BRAND.navy}
           />
+        }
+        ListFooterComponent={
+          providersInfinite.isFetchingNextPage ? (
+            <View className="py-4">
+              <ActivityIndicator color={BRAND.navy} />
+            </View>
+          ) : null
         }
         renderItem={({ item }) => <Row item={item} />}
         ListEmptyComponent={
@@ -346,7 +453,7 @@ export default function DiscoveryIndexScreen() {
             variant="full"
             icon="person-search"
             title="No providers found"
-            description="Try another search or availability filter. New providers appear here once approved."
+            description="Try another search, skill, or availability filter."
           />
         }
       />
