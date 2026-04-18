@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastHost } from '@/components/ToastHost';
 import { useOnlineManager } from '@/core/hooks/useOnlineManager';
@@ -29,13 +30,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
     },
     () => {
       void queryClient.invalidateQueries({ queryKey: ['messages', 'threads'] });
+      void queryClient.invalidateQueries({ queryKey: ['messages', 'unread'] });
     }
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-      <ToastHost />
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        {children}
+        <ToastHost />
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

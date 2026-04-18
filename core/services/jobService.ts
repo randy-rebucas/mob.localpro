@@ -1,154 +1,189 @@
+import axios from 'axios';
+
 import { API } from '@/core/api/endpoints';
 import { jobFromApi, quoteFromApi } from '@/core/api/normalize';
 import { api } from '@/core/api/client';
-import type { Job, JobQuote, JobStatus } from '@/core/types/models';
+import type { Job, JobQuote } from '@/core/types/models';
 
 type UnknownRecord = Record<string, unknown>;
 
-const MOCK_JOBS: Job[] = [
-  {
-    id: 'job-1',
-    title: 'Deep clean 2BR condo — BGC',
-    description: 'Kitchen grease, bathrooms, windows inside only.',
-    status: 'open',
-    budgetMin: 2500,
-    budgetMax: 4000,
-    createdAt: new Date().toISOString(),
-    locationLabel: 'Taguig',
-  },
-  {
-    id: 'job-2',
-    title: 'Install 3 ceiling fans',
-    description: 'Materials on-site. Need licensed electrician.',
-    status: 'quoted',
-    budgetMin: 1500,
-    budgetMax: 2500,
-    createdAt: new Date().toISOString(),
-    locationLabel: 'Quezon City',
-  },
-];
-
-const MOCK_QUOTES: Record<string, JobQuote[]> = {
-  'job-1': [
-    {
-      id: 'q-demo',
-      jobId: 'job-1',
-      providerName: 'CleanPro Manila',
-      amount: 3200,
-      message: 'Eco supplies included. Weekend slots available.',
-      createdAt: new Date().toISOString(),
-    },
-  ],
-  'job-2': [
-    {
-      id: 'q-1',
-      jobId: 'job-2',
-      providerName: 'Spark Electric Co.',
-      amount: 2200,
-      message: 'Can start Saturday AM.',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'q-2',
-      jobId: 'job-2',
-      providerName: 'Handy Juan',
-      amount: 1800,
-      message: 'Weekday evenings only.',
-      createdAt: new Date().toISOString(),
-    },
-  ],
-};
-
-function useMocks(): boolean {
-  return __DEV__;
+function pickString(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
 }
 
-function pickStatus(raw: unknown): JobStatus {
-  const s = typeof raw === 'string' ? raw : '';
-  const allowed: JobStatus[] = ['open', 'quoted', 'in_progress', 'completed', 'cancelled'];
-  return (allowed.includes(s as JobStatus) ? s : 'open') as JobStatus;
+export type ListJobsParams = {
+  status?: string;
+  category?: string;
+  page?: number;
+  limit?: number;
+  aiRank?: boolean;
+};
+
+export type ListJobsResult = {
+  jobs: Job[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type CreateJobInput = {
+  title: string;
+  description: string;
+  categoryId: string;
+  budget?: number;
+  location?: string;
+  coordinates?: { lat: number; lng: number };
+  tags?: string[];
+};
+
+export type FundJobResult =
+  | { kind: 'checkout'; checkoutUrl: string; checkoutSessionId?: string }
+  | { kind: 'simulated'; message?: string };
+
+function extractJobRows(data: UnknownRecord | UnknownRecord[]): UnknownRecord[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data.data)) {
+    return data.data as UnknownRecord[];
+  }
+  return [];
 }
 
 export const jobService = {
-  async listJobs(): Promise<Job[]> {
-    if (useMocks()) {
-      return [...MOCK_JOBS];
-    }
-    const { data } = await api.get<UnknownRecord | UnknownRecord[]>(API.jobs.list);
-    const rows = Array.isArray(data) ? data : Array.isArray(data.data) ? (data.data as UnknownRecord[]) : [];
-    return rows.map((row) => jobFromApi(row));
+  async listJobs(params?: ListJobsParams): Promise<ListJobsResult> {
+    const page = params?.page ?? 1;
+    const limit = params?.limit ?? 10;
+    const { data } = await api.get<UnknownRecord>(API.jobs.list, {
+      params: {
+        page,
+        limit,
+        ...(params?.status ? { status: params.status } : {}),
+        ...(params?.category ? { category: params.category } : {}),
+        ...(params?.aiRank != null ? { aiRank: params.aiRank } : {}),
+      },
+    });
+    const rows = extractJobRows(data);
+    const total = typeof data.total === 'number' ? data.total : rows.length;
+    const pageUsed = typeof data.page === 'number' ? data.page : page;
+    const limitUsed = typeof data.limit === 'number' ? data.limit : limit;
+    const totalPages = Math.max(
+      1,
+      typeof data.totalPages === 'number' ? data.totalPages : Math.ceil(total / Math.max(1, limitUsed))
+    );
+    return {
+      jobs: rows.map((row) => jobFromApi(row)),
+      page: pageUsed,
+      limit: limitUsed,
+      total,
+      totalPages,
+    };
   },
 
   async getJob(id: string): Promise<Job | null> {
-    if (useMocks()) {
-      return MOCK_JOBS.find((j) => j.id === id) ?? null;
+    try {
+      const { data } = await api.get<UnknownRecord>(API.jobs.byId(id));
+      return jobFromApi(data);
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 404) {
+        return null;
+      }
+      throw e;
     }
-    const { data } = await api.get<UnknownRecord>(API.jobs.byId(id));
+  },
+
+  async createJob(input: CreateJobInput): Promise<Job> {
+    const body: UnknownRecord = {
+      title: input.title,
+      description: input.description,
+      category: input.categoryId,
+    };
+    if (input.budget != null) {
+      body.budget = input.budget;
+    }
+    if (input.location) {
+      body.location = input.location;
+    }
+    if (input.coordinates) {
+      body.coordinates = input.coordinates;
+    }
+    if (input.tags?.length) {
+      body.tags = input.tags;
+    }
+    const { data } = await api.post<UnknownRecord>(API.jobs.create, body);
     return jobFromApi(data);
   },
 
-  async createJob(input: {
-    title: string;
-    description: string;
-    budgetMin?: number;
-    budgetMax?: number;
-    locationLabel?: string;
-    categoryId?: string;
-  }): Promise<Job> {
-    if (useMocks()) {
-      const job: Job = {
-        id: `job-${Date.now()}`,
-        title: input.title,
-        description: input.description,
-        status: 'open',
-        budgetMin: input.budgetMin,
-        budgetMax: input.budgetMax,
-        locationLabel: input.locationLabel,
-        createdAt: new Date().toISOString(),
-      };
-      MOCK_JOBS.unshift(job);
-      return job;
-    }
-    const budget = input.budgetMax ?? input.budgetMin;
-    const { data } = await api.post<UnknownRecord>(API.jobs.create, {
-      title: input.title,
-      description: input.description,
-      category: input.categoryId ?? 'general',
-      ...(budget != null ? { budget } : {}),
-      ...(input.locationLabel ? { location: input.locationLabel } : {}),
-    });
+  async updateJob(id: string, patch: Partial<CreateJobInput> & Record<string, unknown>): Promise<Job> {
+    const { data } = await api.put<UnknownRecord>(API.jobs.byId(id), patch);
     return jobFromApi(data);
+  },
+
+  async deleteJob(id: string): Promise<void> {
+    await api.delete(API.jobs.byId(id));
+  },
+
+  async cancelJob(id: string, reason: string): Promise<Job> {
+    const { data } = await api.post<UnknownRecord>(API.jobs.cancel(id), { reason });
+    if (data.job && typeof data.job === 'object') {
+      return jobFromApi(data.job as UnknownRecord);
+    }
+    const fresh = await api.get<UnknownRecord>(API.jobs.byId(id));
+    return jobFromApi(fresh.data);
+  },
+
+  async fundEscrow(jobId: string): Promise<FundJobResult> {
+    const { data } = await api.patch<UnknownRecord>(API.jobs.fund(jobId));
+    if (data.simulated === true) {
+      return { kind: 'simulated', message: pickString(data.message) };
+    }
+    const url = pickString(data.checkoutUrl);
+    if (url) {
+      return {
+        kind: 'checkout',
+        checkoutUrl: url,
+        checkoutSessionId: pickString(data.checkoutSessionId),
+      };
+    }
+    return { kind: 'simulated', message: 'Escrow update completed' };
+  },
+
+  async fundEscrowFromWallet(jobId: string, amount?: number): Promise<Job> {
+    const { data } = await api.post<UnknownRecord>(API.jobs.fundWallet(jobId), {
+      ...(amount != null ? { amount } : {}),
+    });
+    if (data.job && typeof data.job === 'object') {
+      return jobFromApi(data.job as UnknownRecord);
+    }
+    const fresh = await api.get<UnknownRecord>(API.jobs.byId(jobId));
+    return jobFromApi(fresh.data);
   },
 
   async listQuotes(jobId: string): Promise<JobQuote[]> {
-    if (useMocks()) {
-      return MOCK_QUOTES[jobId] ?? [];
-    }
     const { data } = await api.get<UnknownRecord[] | UnknownRecord>(API.jobs.quotes(jobId));
     const rows = Array.isArray(data) ? data : Array.isArray(data.quotes) ? (data.quotes as UnknownRecord[]) : [];
     return rows.map((row) => quoteFromApi(row, jobId));
   },
 
-  async acceptQuote(_jobId: string, quoteId: string): Promise<{ status: JobStatus }> {
-    if (useMocks()) {
-      return { status: 'in_progress' };
-    }
+  async acceptQuote(_jobId: string, quoteId: string): Promise<{ status: string }> {
     const { data } = await api.post<UnknownRecord>(API.quotes.accept(quoteId));
     const jobPayload = (data.job ?? data) as UnknownRecord;
     if (jobPayload && typeof jobPayload === 'object' && 'status' in jobPayload) {
-      return { status: pickStatus(jobPayload.status) };
+      return { status: String(jobPayload.status) };
     }
-    return { status: 'in_progress' };
+    return { status: 'accepted' };
   },
 
-  async submitReview(jobId: string, rating: number, comment: string): Promise<void> {
-    if (useMocks()) {
-      return;
+  async rejectQuote(quoteId: string): Promise<void> {
+    await api.patch(API.quotes.reject(quoteId));
+  },
+
+  async submitReview(jobId: string, rating: number, feedback: string, breakdown?: Record<string, number>): Promise<void> {
+    const body: UnknownRecord = { jobId, rating, feedback };
+    if (breakdown) {
+      body.breakdown = breakdown;
     }
-    await api.post(API.reviews.create, {
-      jobId,
-      rating,
-      feedback: comment,
-    });
+    await api.post(API.reviews.create, body);
   },
 };

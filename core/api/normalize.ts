@@ -1,4 +1,4 @@
-import type { Job, JobQuote, JobStatus, User } from '@/core/types/models';
+import type { Job, JobQuote, User } from '@/core/types/models';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -20,16 +20,6 @@ export function userFromApi(raw: UnknownRecord): User {
   };
 }
 
-const JOB_STATUSES: JobStatus[] = ['open', 'quoted', 'in_progress', 'completed', 'cancelled'];
-
-function pickStatus(raw: unknown): JobStatus {
-  const s = pickString(raw);
-  if (s && JOB_STATUSES.includes(s as JobStatus)) {
-    return s as JobStatus;
-  }
-  return 'open';
-}
-
 /** Normalizes a job document from GET/POST `/api/jobs` or list `data[]`. */
 export function jobFromApi(raw: UnknownRecord): Job {
   const budget = pickNumber(raw.budget);
@@ -40,11 +30,12 @@ export function jobFromApi(raw: UnknownRecord): Job {
     id: String(raw._id ?? raw.id ?? ''),
     title: String(raw.title ?? ''),
     description: String(raw.description ?? ''),
-    status: pickStatus(raw.status),
+    status: pickString(raw.status) ?? 'open',
     budgetMin,
     budgetMax,
     createdAt: pickString(raw.createdAt) ?? new Date().toISOString(),
     locationLabel: pickString(raw.location) ?? pickString(raw.locationLabel),
+    categoryId: pickString(raw.category) ?? pickString(raw.categoryId),
   };
 }
 
@@ -57,6 +48,8 @@ export function quoteFromApi(raw: UnknownRecord, jobId: string): JobQuote {
     pickString((raw.provider as UnknownRecord | undefined)?.name) ??
     'Provider';
 
+  const statusRaw = pickString(raw.status)?.toLowerCase();
+
   return {
     id: String(raw._id ?? raw.id ?? ''),
     jobId: pickString(raw.jobId) ?? jobId,
@@ -64,5 +57,6 @@ export function quoteFromApi(raw: UnknownRecord, jobId: string): JobQuote {
     amount: pickNumber(raw.proposedAmount) ?? pickNumber(raw.amount) ?? 0,
     message: pickString(raw.message) ?? pickString(raw.notes) ?? '',
     createdAt: pickString(raw.createdAt) ?? new Date().toISOString(),
+    status: statusRaw ?? 'pending',
   };
 }

@@ -40,7 +40,13 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LocalPro uses your location to attach GPS coordinates to saved addresses."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

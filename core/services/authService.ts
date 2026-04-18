@@ -1,23 +1,19 @@
-import * as SecureStore from 'expo-secure-store';
-
 import { API } from '@/core/api/endpoints';
 import { userFromApi } from '@/core/api/normalize';
 import { api } from '@/core/api/client';
-import { refreshSessionRequest } from '@/core/api/sessionRefresh';
+import { fetchCurrentUser, refreshSessionRequest } from '@/core/api/sessionRefresh';
+import { setStoredRefreshToken } from '@/core/lib/authTokens';
 import type { User } from '@/core/types/models';
 import { useSessionStore } from '@/core/stores/sessionStore';
 
-const REFRESH_TOKEN_KEY = 'localpro_refresh_token';
-
 type UnknownRecord = Record<string, unknown>;
 
-async function persistRefreshToken(token: string | null) {
-  if (token) {
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
-  } else {
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-  }
-}
+export type RegisterInput = {
+  name: string;
+  email: string;
+  password: string;
+  role: 'client' | 'provider';
+};
 
 export const authService = {
   async refreshSession(): Promise<void> {
@@ -25,6 +21,10 @@ export const authService = {
     if (user) {
       useSessionStore.getState().setUser(user);
     }
+  },
+
+  async fetchMe(): Promise<User | null> {
+    return fetchCurrentUser();
   },
 
   async login(email: string, password: string): Promise<User> {
@@ -37,8 +37,54 @@ export const authService = {
     }
     const user = userFromApi(data.user);
     if (data.refreshToken) {
-      await persistRefreshToken(data.refreshToken);
+      await setStoredRefreshToken(data.refreshToken);
     }
+    useSessionStore.getState().setUser(user);
+    return user;
+  },
+
+  async register(input: RegisterInput): Promise<{ message?: string }> {
+    const { data } = await api.post<{ message?: string }>(API.auth.register, {
+      name: input.name.trim(),
+      email: input.email.trim(),
+      password: input.password,
+      role: input.role,
+    });
+    return data;
+  },
+
+  async forgotPassword(email: string): Promise<{ message?: string }> {
+    const { data } = await api.post<{ message?: string }>(API.auth.forgotPassword, { email: email.trim() });
+    return data;
+  },
+
+  async resetPassword(token: string, password: string): Promise<{ message?: string }> {
+    const { data } = await api.post<{ message?: string }>(API.auth.resetPassword, {
+      token: token.trim(),
+      password,
+    });
+    return data;
+  },
+
+  async verifyEmail(token: string): Promise<{ message?: string }> {
+    const { data } = await api.post<{ message?: string }>(API.auth.verifyEmail, { token: token.trim() });
+    return data;
+  },
+
+  async sendPhoneOtp(phone: string): Promise<{ message?: string }> {
+    const { data } = await api.post<{ message?: string }>(API.auth.phoneSend, { phone: phone.trim() });
+    return data;
+  },
+
+  async verifyPhoneOtp(phone: string, code: string): Promise<User> {
+    const { data } = await api.post<{ user?: UnknownRecord; message?: string }>(API.auth.phoneVerify, {
+      phone: phone.trim(),
+      code: code.trim(),
+    });
+    if (!data.user) {
+      throw new Error(data.message ?? 'Verification failed');
+    }
+    const user = userFromApi(data.user);
     useSessionStore.getState().setUser(user);
     return user;
   },
@@ -49,7 +95,6 @@ export const authService = {
     } catch {
       // still clear local session
     }
-    await persistRefreshToken(null);
     await useSessionStore.getState().clearSession();
   },
 };

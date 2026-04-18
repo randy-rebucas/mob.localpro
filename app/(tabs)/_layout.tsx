@@ -1,13 +1,26 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useQuery } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
+import { messageService } from '@/core/services/messageService';
+import { useSessionStore } from '@/core/stores/sessionStore';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const user = useSessionStore((s) => s.user);
+  const unreadQuery = useQuery({
+    queryKey: ['messages', 'unread'],
+    queryFn: () => messageService.getUnreadCount(),
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+  const unread = unreadQuery.data ?? 0;
+  const messagesBadge: string | number | undefined =
+    user && unread > 0 ? (unread > 99 ? '99+' : unread) : undefined;
 
   return (
     <Tabs
@@ -34,6 +47,7 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: 'Messages',
+          tabBarBadge: messagesBadge,
           tabBarIcon: ({ color, size }) => <MaterialIcons name="chat-bubble" color={color} size={size ?? 26} />,
         }}
       />

@@ -1,15 +1,17 @@
-export type JobStatus = 'open' | 'quoted' | 'in_progress' | 'completed' | 'cancelled';
-
 export interface Job {
   id: string;
   title: string;
   description: string;
-  status: JobStatus;
+  /** Raw status from API (`open`, `quoted`, `assigned`, `accepted`, `in_progress`, …). */
+  status: string;
   budgetMin?: number;
   budgetMax?: number;
   createdAt: string;
   locationLabel?: string;
+  categoryId?: string;
 }
+
+export type QuoteStatus = 'pending' | 'accepted' | 'rejected' | string;
 
 export interface JobQuote {
   id: string;
@@ -18,6 +20,7 @@ export interface JobQuote {
   amount: number;
   message: string;
   createdAt: string;
+  status?: QuoteStatus;
 }
 
 export interface User {
@@ -26,3 +29,10 @@ export interface User {
   email: string;
   role?: string;
 }
+
+export type ChatMessage = {
+  id: string;
+  body: string;
+  createdAt: string;
+  senderLabel?: string;
+};

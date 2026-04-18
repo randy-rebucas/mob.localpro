@@ -25,7 +25,7 @@ export function useAppStreams(
     }
 
     const notificationsUrl = `${API_BASE_URL}${API.notifications.stream}`;
-    const notifEs = new EventSource(notificationsUrl);
+    const notifEs = new EventSource(notificationsUrl, { withCredentials: true });
 
     notifEs.addEventListener('message', (e) => {
       if ('data' in e && typeof e.data === 'string') {
@@ -36,7 +36,7 @@ export function useAppStreams(
     let msgEs: InstanceType<typeof EventSource> | null = null;
     if (activeThreadId) {
       const messagesUrl = `${API_BASE_URL}${API.messages.stream(activeThreadId)}`;
-      msgEs = new EventSource(messagesUrl);
+      msgEs = new EventSource(messagesUrl, { withCredentials: true });
       msgEs.addEventListener('message', (e) => {
         if ('data' in e && typeof e.data === 'string') {
           msgRef.current?.(e.data);
