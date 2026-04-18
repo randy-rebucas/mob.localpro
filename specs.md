@@ -272,11 +272,13 @@ profile/addresses.tsx
 
 Features:
 
-- Support chat
-- Dispute handling
+- Support hub (signed-in quick links + pull to refresh ticket summary)
+- Support chat (`GET`/`POST` `/api/support`, SSE stream)
+- Support tickets list, new ticket form, ticket detail
+- Knowledge articles list + article detail (`/api/knowledge`)
 
 Routes:
-support/index.tsx
+support/index.tsx, support/chat.tsx, support/tickets.tsx, support/ticket-new.tsx, support/ticket/[id].tsx, support/articles.tsx, support/articles/[id].tsx
 
 ---
 

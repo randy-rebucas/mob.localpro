@@ -72,15 +72,17 @@ export default function HomeScreen() {
   });
 
   const loyaltyQuery = useQuery({
-    queryKey: ['home', 'loyalty'],
-    queryFn: () => loyaltyService.getSummary(),
+    queryKey: ['loyalty'],
+    queryFn: () => loyaltyService.getAccount(),
     enabled: !!user,
+    staleTime: 30_000,
   });
 
   const refreshing = announcementsQuery.isRefetching || (!!user && loyaltyQuery.isRefetching);
 
   const onRefresh = () => {
     void qc.invalidateQueries({ queryKey: ['home'] });
+    void qc.invalidateQueries({ queryKey: ['loyalty'] });
   };
 
   const goOrSignIn = useCallback(
@@ -149,34 +151,6 @@ export default function HomeScreen() {
       {/* Announcements */}
       <View className="px-5">
         <HomeAnnouncements items={announcementsQuery.data ?? []} />
-      </View>
-
-      {/* 2. Quick actions */}
-      <View className="mt-8 px-5">
-        <Text className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-          Quick actions
-        </Text>
-        <View className="mt-3 flex-row gap-2">
-          {[
-            { label: 'Post job', icon: 'add-circle-outline' as const, to: '/jobs/new' },
-            { label: 'Discover', icon: 'explore' as const, to: '/discovery' },
-            { label: 'Messages', icon: 'forum' as const, to: '/messages' },
-            { label: 'Alerts', icon: 'notifications-none' as const, to: '/notifications' },
-          ].map((q) => (
-            <Pressable
-              key={q.label}
-              accessibilityRole="button"
-              accessibilityLabel={q.label}
-              onPressIn={() => void Haptics.selectionAsync()}
-              onPress={() => goOrSignIn(q.to)}
-              className="min-h-[76px] flex-1 items-center justify-center rounded-2xl border border-neutral-200 bg-white py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
-              <MaterialIcons name={q.icon} size={22} color={BRAND.navy} />
-              <Text className="mt-1.5 text-center text-[11px] font-semibold text-neutral-800 dark:text-neutral-200">
-                {q.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
       </View>
 
       {/* 3. All services */}
@@ -266,7 +240,7 @@ export default function HomeScreen() {
                   <ActivityIndicator style={{ marginTop: 4 }} size="small" color={BRAND.navy} />
                 ) : (
                   <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-                    {`${loyaltyQuery.data?.points ?? 0} points · ${formatTier(loyaltyQuery.data?.tier ?? 'bronze')} tier`}
+                    {`${loyaltyQuery.data?.account.points ?? 0} points · ${formatTier(loyaltyQuery.data?.account.tier ?? 'bronze')} tier`}
                   </Text>
                 )}
               </View>

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mob.localpro",
-    "slug": "mob-localpro",
+    "name": "Localpro",
+    "slug": "localpro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -55,6 +55,11 @@
         }
       ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": "127fcd22-44ef-4bfd-81d0-936532725cca"
+      }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

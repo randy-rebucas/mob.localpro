@@ -68,6 +68,7 @@ export const API = {
     read: (id: string) => `/api/notifications/${id}/read`,
     stream: '/api/notifications/stream',
     preferences: '/api/notifications/preferences',
+    registerToken: '/api/notifications/register-token',
   },
   payments: {
     create: '/api/payments',
@@ -137,6 +138,8 @@ export const API = {
   },
   providers: {
     list: '/api/providers',
+    /** Public directory search (`q`, `skill`, `page`, `limit`) — see MOBILE_PROVIDER_DISCOVERY_GUIDE.md */
+    search: '/api/providers/search',
     profileById: (id: string) => `/api/providers/${id}/profile`,
     myProfile: '/api/providers/profile',
     updateProfile: '/api/providers/profile',
