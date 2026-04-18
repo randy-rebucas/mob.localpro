@@ -1,6 +1,9 @@
+import axios from 'axios';
+
 import { API } from '@/core/api/endpoints';
 import { userFromApi } from '@/core/api/normalize';
 import { api } from '@/core/api/client';
+import { uploadPublicImage } from '@/core/services/uploadService';
 import type { MeProfile, NotificationPreferences, SavedAddress } from '@/core/types/profile';
 import type { User } from '@/core/types/models';
 import { useSessionStore } from '@/core/stores/sessionStore';
@@ -53,6 +56,29 @@ function mapPreferences(raw: UnknownRecord | undefined): NotificationPreferences
   };
 }
 
+/** Some APIs disallow `PATCH /api/auth/me`; fall back to user settings. */
+async function saveAvatarOnServer(publicUrl: string): Promise<void> {
+  try {
+    await api.patch(API.auth.me, { avatar: publicUrl });
+    return;
+  } catch (e) {
+    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+    if (status !== 405 && status !== 404) {
+      throw e;
+    }
+  }
+  try {
+    await api.put(API.user.settings, { avatar: publicUrl });
+    return;
+  } catch (e) {
+    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+    if (status !== 405 && status !== 404) {
+      throw e;
+    }
+  }
+  await api.patch(API.user.settings, { avatar: publicUrl });
+}
+
 function mapMeProfile(raw: UnknownRecord): MeProfile {
   const u = userFromApi(raw);
   const addrsRaw = raw.addresses;
@@ -83,6 +109,19 @@ export const profileService = {
     };
     useSessionStore.getState().setUser(sessionUser);
     return profile;
+  },
+
+  /**
+   * Uploads a local image, then `PATCH /api/auth/me` with `{ avatar }`.
+   * Refetches profile so the client matches the server.
+   */
+  async updateAvatarFromLocalUri(localUri: string, file?: { mimeType?: string | null; fileName?: string | null }): Promise<MeProfile> {
+    const publicUrl = await uploadPublicImage(localUri, {
+      mimeType: file?.mimeType ?? undefined,
+      fileName: file?.fileName ?? undefined,
+    });
+    await saveAvatarOnServer(publicUrl);
+    return profileService.getMe();
   },
 
   async listAddresses(): Promise<SavedAddress[]> {

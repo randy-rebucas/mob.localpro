@@ -1,10 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { type ComponentProps, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { BRAND } from '@/constants/brand';
+import { pickAvatarFromCamera, pickAvatarFromLibrary } from '@/core/lib/profileAvatarPicker';
 import { authService } from '@/core/services/authService';
 import { profileService } from '@/core/services/profileService';
 import { useSessionStore } from '@/core/stores/sessionStore';
@@ -44,13 +45,72 @@ function MenuRow({
 export default function ProfileHomeScreen() {
   const user = useSessionStore((s) => s.user);
   const showToast = useToastStore((s) => s.show);
+  const queryClient = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const meQuery = useQuery({
     queryKey: ['profile', 'me'],
     queryFn: () => profileService.getMe(),
     enabled: !!user,
   });
+
+  async function uploadAvatarAsset(asset: { uri: string; mimeType?: string | null; fileName?: string | null }) {
+    setUploadingAvatar(true);
+    try {
+      const updated = await profileService.updateAvatarFromLocalUri(asset.uri, {
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+      });
+      queryClient.setQueryData(['profile', 'me'], updated);
+      showToast('Profile photo updated');
+    } catch (e) {
+      showToast(getApiErrorMessage(e, 'Could not update profile photo'), 'error');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  function openAvatarSourcePicker() {
+    if (!user) return;
+
+    const chooseLibrary = () => {
+      void (async () => {
+        const r = await pickAvatarFromLibrary();
+        if (r.ok) await uploadAvatarAsset(r.asset);
+        else if (r.reason === 'denied') {
+          showToast('Allow photo library access in Settings to choose a photo.', 'error');
+        }
+      })();
+    };
+
+    const chooseCamera = () => {
+      void (async () => {
+        const r = await pickAvatarFromCamera();
+        if (r.ok) await uploadAvatarAsset(r.asset);
+        else if (r.reason === 'denied') {
+          showToast('Allow camera access in Settings to take a photo.', 'error');
+        }
+      })();
+    };
+
+    if (Platform.OS === 'web') {
+      void (async () => {
+        const r = await pickAvatarFromLibrary();
+        if (r.ok) await uploadAvatarAsset(r.asset);
+        else if (r.reason === 'denied') {
+          showToast('Allow access to photos to set your profile picture.', 'error');
+        }
+      })();
+      return;
+    }
+
+    Alert.alert('Profile photo', 'How would you like to add a photo?', [
+      { text: 'Take photo', onPress: chooseCamera },
+      { text: 'Choose from library', onPress: chooseLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
 
   async function onSignOut() {
     setSigningOut(true);
@@ -94,13 +154,31 @@ export default function ProfileHomeScreen() {
     <ScrollView className="flex-1 bg-[#eef2f7] dark:bg-neutral-950" contentContainerClassName="grow px-5 pb-10 pt-4">
       <View className="overflow-hidden rounded-3xl border border-neutral-200/80 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <View className="flex-row items-center gap-4">
-          {me?.avatar ? (
-            <Image source={{ uri: me.avatar }} className="h-16 w-16 rounded-full bg-neutral-200" accessibilityLabel="Profile photo" />
-          ) : (
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700">
-              <MaterialIcons name="person" size={36} color="#737373" />
-            </View>
-          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={user ? 'Change profile photo' : undefined}
+            disabled={!user || uploadingAvatar || meQuery.isFetching}
+            onPress={() => openAvatarSourcePicker()}
+            className="relative active:opacity-90">
+            {uploadingAvatar ? (
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700">
+                <ActivityIndicator color={BRAND.navy} />
+              </View>
+            ) : me?.avatar ? (
+              <Image source={{ uri: me.avatar }} className="h-16 w-16 rounded-full bg-neutral-200" accessibilityLabel="Profile photo" />
+            ) : (
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700">
+                <MaterialIcons name="person" size={36} color="#737373" />
+              </View>
+            )}
+            {user && !uploadingAvatar ? (
+              <View
+                className="absolute -bottom-0.5 -right-0.5 h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-neutral-800 dark:border-neutral-900 dark:bg-neutral-700"
+                pointerEvents="none">
+                <MaterialIcons name="photo-camera" size={14} color="#ffffff" />
+              </View>
+            ) : null}
+          </Pressable>
           <View className="min-w-0 flex-1">
             <Text className="text-xl font-bold text-neutral-900 dark:text-neutral-50">{me?.displayName ?? user?.displayName ?? 'Guest'}</Text>
             <Text className="mt-1 text-sm text-neutral-600 dark:text-neutral-400" numberOfLines={2}>

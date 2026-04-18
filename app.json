@@ -51,6 +51,13 @@
         {
           "locationWhenInUsePermission": "LocalPro uses your location to attach GPS coordinates to saved addresses."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LocalPro needs access to your photos to set your profile picture.",
+          "cameraPermission": "LocalPro needs the camera to take your profile picture."
+        }
       ]
     ],
     "extra": {

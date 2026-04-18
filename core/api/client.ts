@@ -20,6 +20,20 @@ export const api = axios.create({
   },
 });
 
+api.interceptors.request.use((config) => {
+  const body = config.data;
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    const headers = config.headers;
+    if (headers && typeof headers.delete === 'function') {
+      headers.delete('Content-Type');
+    } else if (headers && typeof headers === 'object') {
+      delete (headers as Record<string, unknown>)['Content-Type'];
+      delete (headers as Record<string, unknown>)['content-type'];
+    }
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
