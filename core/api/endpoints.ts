@@ -16,6 +16,7 @@ export const API = {
     forgotPassword: '/api/auth/forgot-password',
     resetPassword: '/api/auth/reset-password',
     me: '/api/auth/me',
+    meAvatar: '/api/auth/me/avatar',
     meAddress: '/api/auth/me/addresses',
     meAddressById: (id: string) => `/api/auth/me/addresses/${id}`,
     mePreferences: '/api/auth/me/preferences',

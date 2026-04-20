@@ -28,6 +28,8 @@ export interface User {
   displayName: string;
   email: string;
   role?: string;
+  /** Profile image URL from `GET /api/auth/me` / avatar upload. */
+  avatar?: string | null;
 }
 
 export type ChatMessage = {

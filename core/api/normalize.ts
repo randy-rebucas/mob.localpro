@@ -12,11 +12,13 @@ function pickNumber(v: unknown): number | undefined {
 
 /** `/api/auth/me` and login `user` payloads use `_id` + `name`. */
 export function userFromApi(raw: UnknownRecord): User {
+  const avatarRaw = raw.avatar;
   return {
     id: String(raw._id ?? raw.id ?? ''),
     displayName: String(raw.name ?? raw.displayName ?? ''),
     email: String(raw.email ?? ''),
     role: pickString(raw.role),
+    avatar: avatarRaw === null ? null : pickString(avatarRaw),
   };
 }
 

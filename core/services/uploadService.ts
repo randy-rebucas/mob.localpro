@@ -1,77 +1,13 @@
 import { Platform } from 'react-native';
 
 import { API } from '@/core/api/endpoints';
+import { refreshSessionRequest } from '@/core/api/sessionRefresh';
 import { API_BASE_URL } from '@/core/constants/env';
+import { captureCsrfTokenFromJsonBody, captureCsrfTokenFromResponseHeaders, csrfHeaderFields } from '@/core/lib/csrf';
+import { extractPublicUrlFromUploadResponse, pickErrorMessage } from '@/core/services/uploadResponseParse';
+import { useSessionStore } from '@/core/stores/sessionStore';
 
-type UnknownRecord = Record<string, unknown>;
-
-function normalizeAssetUrl(u: string): string {
-  const trimmed = u.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (trimmed.startsWith('/')) {
-    const base = API_BASE_URL.replace(/\/$/, '');
-    return `${base}${trimmed}`;
-  }
-  return trimmed;
-}
-
-function extractUploadedUrl(data: unknown): string | null {
-  if (typeof data === 'string' && data.trim()) {
-    return normalizeAssetUrl(data);
-  }
-  if (!data || typeof data !== 'object') return null;
-  const o = data as UnknownRecord;
-  for (const k of [
-    'url',
-    'fileUrl',
-    'avatar',
-    'avatarUrl',
-    'imageUrl',
-    'mediaUrl',
-    'location',
-    'secure_url',
-    'publicUrl',
-    'href',
-    'src',
-    'path',
-  ] as const) {
-    const v = o[k];
-    if (typeof v === 'string' && v.trim()) {
-      return normalizeAssetUrl(v);
-    }
-  }
-  const files = o.files;
-  if (Array.isArray(files) && files[0] && typeof files[0] === 'object') {
-    const u = (files[0] as UnknownRecord).url;
-    if (typeof u === 'string' && u.trim()) {
-      return normalizeAssetUrl(u);
-    }
-  }
-  const file = o.file;
-  if (file && typeof file === 'object') {
-    const u = (file as UnknownRecord).url;
-    if (typeof u === 'string' && u.trim()) {
-      return normalizeAssetUrl(u);
-    }
-  }
-  if ('data' in o) {
-    return extractUploadedUrl(o.data);
-  }
-  const result = o.result;
-  if (result && typeof result === 'object') {
-    return extractUploadedUrl(result);
-  }
-  return null;
-}
-
-function pickErrorMessage(data: unknown, status: number): string {
-  if (data && typeof data === 'object') {
-    const o = data as UnknownRecord;
-    const m = o.message ?? o.error;
-    if (typeof m === 'string' && m.trim()) return m.trim();
-  }
-  return `Upload failed (${status})`;
-}
+export { extractPublicUrlFromUploadResponse } from '@/core/services/uploadResponseParse';
 
 async function appendFileToFormData(form: FormData, uri: string, name: string, mimeType: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -88,6 +24,7 @@ async function appendFileToFormData(form: FormData, uri: string, name: string, m
  * Uses `fetch` instead of Axios so FormData is not JSON-stringified (Axios does that when
  * the default `Content-Type: application/json` is still set for some RN/merge cases).
  * Cookies are sent with `credentials: 'include'` to match `api` session behavior.
+ * On **401**, refreshes the session once (same as axios flow) and retries the same method.
  */
 export async function uploadPublicImage(localUri: string, opts?: { fileName?: string; mimeType?: string }): Promise<string> {
   const mimeType = opts?.mimeType?.trim() || 'image/jpeg';
@@ -107,19 +44,34 @@ export async function uploadPublicImage(localUri: string, opts?: { fileName?: st
   async function requestUpload(method: 'POST' | 'PUT'): Promise<Response> {
     const form = new FormData();
     await appendFileToFormData(form, localUri, name, mimeType);
+    const csrf = await csrfHeaderFields();
     return fetch(url, {
       method,
       body: form,
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...csrf,
       },
     });
   }
 
-  let res = await requestUpload('POST');
+  async function requestWithRefreshOn401(method: 'POST' | 'PUT'): Promise<Response> {
+    let attempt = await requestUpload(method);
+    if (attempt.status !== 401) {
+      return attempt;
+    }
+    const user = await refreshSessionRequest();
+    if (user) {
+      useSessionStore.getState().setUser(user);
+    }
+    attempt = await requestUpload(method);
+    return attempt;
+  }
+
+  let res = await requestWithRefreshOn401('POST');
   if (res.status === 405) {
-    res = await requestUpload('PUT');
+    res = await requestWithRefreshOn401('PUT');
   }
 
   const text = await res.text();
@@ -133,10 +85,14 @@ export async function uploadPublicImage(localUri: string, opts?: { fileName?: st
   }
 
   if (!res.ok) {
+    captureCsrfTokenFromResponseHeaders(res.headers);
     throw new Error(pickErrorMessage(data, res.status));
   }
 
-  const publicUrl = extractUploadedUrl(data);
+  captureCsrfTokenFromResponseHeaders(res.headers);
+  captureCsrfTokenFromJsonBody(data);
+
+  const publicUrl = extractPublicUrlFromUploadResponse(data);
   if (!publicUrl) {
     const hint =
       data && typeof data === 'object' ? ` Keys: ${Object.keys(data as object).join(', ')}` : '';

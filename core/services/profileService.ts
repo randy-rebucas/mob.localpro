@@ -1,9 +1,12 @@
-import axios from 'axios';
+import { Platform } from 'react-native';
 
 import { API } from '@/core/api/endpoints';
 import { userFromApi } from '@/core/api/normalize';
 import { api } from '@/core/api/client';
-import { uploadPublicImage } from '@/core/services/uploadService';
+import { refreshSessionRequest } from '@/core/api/sessionRefresh';
+import { API_BASE_URL } from '@/core/constants/env';
+import { captureCsrfTokenFromJsonBody, captureCsrfTokenFromResponseHeaders, csrfHeaderFields } from '@/core/lib/csrf';
+import { extractPublicUrlFromUploadResponse, pickErrorMessage } from '@/core/services/uploadResponseParse';
 import type { MeProfile, NotificationPreferences, SavedAddress } from '@/core/types/profile';
 import type { User } from '@/core/types/models';
 import { useSessionStore } from '@/core/stores/sessionStore';
@@ -56,27 +59,14 @@ function mapPreferences(raw: UnknownRecord | undefined): NotificationPreferences
   };
 }
 
-/** Some APIs disallow `PATCH /api/auth/me`; fall back to user settings. */
-async function saveAvatarOnServer(publicUrl: string): Promise<void> {
-  try {
-    await api.patch(API.auth.me, { avatar: publicUrl });
+async function appendAvatarFileToFormData(form: FormData, uri: string, mimeType: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    const res = await fetch(uri);
+    const blob = await res.blob();
+    form.append('file', blob, 'avatar.jpg');
     return;
-  } catch (e) {
-    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
-    if (status !== 405 && status !== 404) {
-      throw e;
-    }
   }
-  try {
-    await api.put(API.user.settings, { avatar: publicUrl });
-    return;
-  } catch (e) {
-    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
-    if (status !== 405 && status !== 404) {
-      throw e;
-    }
-  }
-  await api.patch(API.user.settings, { avatar: publicUrl });
+  form.append('file', { uri, name: 'avatar.jpg', type: mimeType } as unknown as Blob);
 }
 
 function mapMeProfile(raw: UnknownRecord): MeProfile {
@@ -106,22 +96,66 @@ export const profileService = {
       displayName: profile.displayName,
       email: profile.email,
       role: profile.role,
+      avatar: profile.avatar,
     };
     useSessionStore.getState().setUser(sessionUser);
     return profile;
   },
 
   /**
-   * Uploads a local image, then `PATCH /api/auth/me` with `{ avatar }`.
-   * Refetches profile so the client matches the server.
+   * `POST /api/auth/me/avatar` — multipart `file` (see `avatar-upload-implementation.md`).
+   * Uses `fetch` (same rationale as `uploadPublicImage`) so multipart is not sent as JSON and
+   * each attempt builds a fresh `FormData` (401 refresh retry is safe).
    */
-  async updateAvatarFromLocalUri(localUri: string, file?: { mimeType?: string | null; fileName?: string | null }): Promise<MeProfile> {
-    const publicUrl = await uploadPublicImage(localUri, {
-      mimeType: file?.mimeType ?? undefined,
-      fileName: file?.fileName ?? undefined,
-    });
-    await saveAvatarOnServer(publicUrl);
-    return profileService.getMe();
+  async uploadAvatar(uri: string, mimeType = 'image/jpeg'): Promise<string> {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    const path = API.auth.meAvatar.startsWith('/') ? API.auth.meAvatar : `/${API.auth.meAvatar}`;
+    const requestUrl = `${base}${path}`;
+
+    async function postOnce(): Promise<Response> {
+      const form = new FormData();
+      await appendAvatarFileToFormData(form, uri, mimeType);
+      const csrf = await csrfHeaderFields();
+      return fetch(requestUrl, {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+        headers: { Accept: 'application/json', ...csrf },
+      });
+    }
+
+    let res = await postOnce();
+    if (res.status === 401) {
+      const refreshedUser = await refreshSessionRequest();
+      if (refreshedUser) {
+        useSessionStore.getState().setUser(refreshedUser);
+      }
+      res = await postOnce();
+    }
+
+    const text = await res.text();
+    let data: unknown = {};
+    if (text) {
+      try {
+        data = JSON.parse(text) as unknown;
+      } catch {
+        throw new Error(`Avatar upload failed (${res.status}): response was not JSON`);
+      }
+    }
+
+    if (!res.ok) {
+      captureCsrfTokenFromResponseHeaders(res.headers);
+      throw new Error(pickErrorMessage(data, res.status));
+    }
+
+    captureCsrfTokenFromResponseHeaders(res.headers);
+    captureCsrfTokenFromJsonBody(data);
+
+    const publicUrl = extractPublicUrlFromUploadResponse(data);
+    if (!publicUrl) {
+      throw new Error('Upload succeeded but no avatar URL was returned.');
+    }
+    return publicUrl;
   },
 
   async listAddresses(): Promise<SavedAddress[]> {

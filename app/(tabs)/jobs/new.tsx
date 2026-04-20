@@ -5,6 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { z } from 'zod';
 
+import { CategoryDropdown } from '@/components/jobs/CategoryDropdown';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { BRAND } from '@/constants/brand';
 import { categoryService } from '@/core/services/categoryService';
@@ -36,8 +37,7 @@ export default function PostJobScreen() {
   const {
     control,
     handleSubmit,
-    setValue,
-    watch,
+    trigger,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -50,8 +50,6 @@ export default function PostJobScreen() {
       tags: '',
     },
   });
-
-  const categoryId = watch('categoryId');
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -98,29 +96,18 @@ export default function PostJobScreen() {
       ) : categoriesQuery.isError ? (
         <Text className="mt-2 text-sm text-red-600">{getApiErrorMessage(categoriesQuery.error, 'Could not load categories')}</Text>
       ) : (
-        <View className="mt-2 flex-row flex-wrap gap-2">
-          {(categoriesQuery.data ?? []).map((c) => {
-            const selected = categoryId === c.id;
-            return (
-              <Pressable
-                key={c.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`Category ${c.name}`}
-                onPress={() => setValue('categoryId', c.id, { shouldValidate: true })}
-                className={`rounded-xl border-2 px-3 py-2 ${
-                  selected ? '' : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900'
-                }`}
-                style={selected ? { borderColor: BRAND.navy, backgroundColor: 'rgba(0, 75, 141, 0.1)' } : undefined}>
-                <Text
-                  className={`text-sm font-medium ${selected ? '' : 'text-neutral-800 dark:text-neutral-200'}`}
-                  style={selected ? { color: BRAND.navy } : undefined}>
-                  {c.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Controller
+          control={control}
+          name="categoryId"
+          render={({ field: { onChange, value } }) => (
+            <CategoryDropdown
+              categories={categoriesQuery.data ?? []}
+              value={value}
+              onChange={onChange}
+              onCommitValidate={() => void trigger('categoryId')}
+            />
+          )}
+        />
       )}
       {errors.categoryId ? <Text className="mt-1 text-sm text-red-600">{errors.categoryId.message}</Text> : null}
 
